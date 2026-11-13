@@ -5,7 +5,7 @@ const CFG = {
   GOOGLE: '454055120059-nuhaop4r62urc3u036cc3grpqo71ulg7.apps.googleusercontent.com'
 };
 const BASE = 'https://puntofibra.github.io/galaxypop/';
-const APP_V = '1';   // ¡tiene que coincidir SIEMPRE con version.json!
+const APP_V = '2';   // ¡tiene que coincidir SIEMPRE con version.json!
 const NIV = 100;
 let PUB = {}, IMGV = '1';
 
