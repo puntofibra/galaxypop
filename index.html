@@ -222,7 +222,7 @@ const CFG = {
   GOOGLE: '454055120059-nuhaop4r62urc3u036cc3grpqo71ulg7.apps.googleusercontent.com'
 };
 const BASE = 'https://puntofibra.github.io/galaxypop/';
-const APP_V = '1';   // ¡tiene que coincidir SIEMPRE con version.json!
+const APP_V = '2';   // ¡tiene que coincidir SIEMPRE con version.json!
 const NIV = 100;
 let PUB = {}, IMGV = '1';
 
@@ -685,7 +685,7 @@ function popBubble(W, b, p){
   if (kills >= 2) ev(W,'combo', b.x, b.y, kills);
 }
 function enemyAI(W, e, dt){
-  const sp = (e.angry ? 1.6 : 1) * ({walker:46, jumper:38, flyer:52, shooter:40, roller:92, ghost:26}[e.k] || 40);
+  const sp = (e.angry ? 1.55 : 1) * ({walker:58, jumper:46, flyer:56, shooter:48, roller:100, ghost:30}[e.k] || 50);
   const p = nearestP(W, e);
   if (e.k==='flyer'){
     if (!e.vx){ e.vx = sp*e.dir; e.vy = sp*.8; }
@@ -700,17 +700,44 @@ function enemyAI(W, e, dt){
     e.x = clamp(e.x, 2*T, GW-2*T-e.w); e.y = clamp(e.y, T, GH-2*T);
     return;
   }
+  /* van a por ti, como en el original: caminan hacia el jugador, bajan de las plataformas si estás debajo
+     y saltan a la de arriba si estás encima */
+  e.think = (e.think || 0) - dt;
+  if (e.onGround && e.think <= 0){
+    e.think = .35 + Math.random()*.5;
+    if (p){
+      const dx = p.x - e.x, dy = p.y - e.y;
+      if (Math.random() < .12) e.dir = Math.random() < .5 ? -1 : 1;       /* un poco de despiste para que no vayan en fila */
+      else if (Math.abs(dx) > 6) e.dir = Math.sign(dx);
+      e.goal = dy > T ? 'down' : dy < -T ? 'up' : 'same'; e.dropOk = Math.random() < .4;
+      if (e.goal==='down' && e.k !== 'roller'){
+        /* busca el borde más cercano de su plataforma para bajar hacia ti */
+        const ty = Math.floor((e.y + e.h + 2)/T), tx = Math.floor((e.x + 7)/T);
+        let L = 99, Rr = 99;
+        for (let d=1; d<MW; d++){ const x = tx - d; if (x < 2) break; if (!solidAt(W, x, ty)){ L = d; break; } }
+        for (let d=1; d<MW; d++){ const x = tx + d; if (x > MW-3) break; if (!solidAt(W, x, ty)){ Rr = d; break; } }
+        if (L < 99 || Rr < 99) e.dir = L === Rr ? (Math.sign(dx) || e.dir) : (L < Rr ? -1 : 1);
+      }
+    }
+  }
   e.vx = e.dir * sp;
   const hit = moveBody(W, e, dt);
   if (hit) e.dir = -hit;
   if (e.onGround){
-    if (e.k !== 'roller' && !groundAhead(W, e, e.dir) && Math.random() < .6) e.dir = -e.dir;
     e.jumpT -= dt;
-    const wantUp = p && p.y < e.y - T*2 && Math.abs(p.x - e.x) < T*6;
-    if (e.k==='jumper' && e.jumpT <= 0){ e.vy = JUMP*.95; e.jumpT = .9 + Math.random()*1.2; if (p) e.dir = Math.sign(p.x - e.x) || e.dir; }
-    else if (e.k !== 'roller' && wantUp && e.jumpT <= 0){ e.vy = JUMP; e.jumpT = 2 + Math.random()*2; }
-    else if (e.jumpT <= 0) e.jumpT = 1 + Math.random()*2;
-    if (p && Math.random() < dt*.25) e.dir = Math.sign(p.x - e.x) || e.dir;
+    /* borde de la plataforma */
+    if (!groundAhead(W, e, e.dir)){
+      const drop = e.k==='roller' || e.goal==='down' || (e.goal==='same' && e.dropOk);
+      if (!drop){ e.dir = -e.dir; e.think = .6; }
+    }
+    if (e.k==='jumper' && e.jumpT <= 0){ e.vy = JUMP*.95; e.jumpT = .8 + Math.random()*1.1; if (p) e.dir = Math.sign(p.x - e.x) || e.dir; ev(W,'ejump'); }
+    else if (e.k !== 'roller' && e.goal==='up' && e.jumpT <= 0){
+      /* ¿hay plataforma encima a su alcance? */
+      const tx = Math.floor((e.x + 7)/T), ty = Math.floor((e.y + e.h)/T);
+      let plat = false; for (let d=2; d<=5; d++){ for (let ox=-1; ox<=1; ox++) if (solidAt(W, tx+ox, ty-d) === 1) plat = true; }
+      if (plat){ e.vy = JUMP; e.jumpT = (e.angry ? .5 : 1) + Math.random()*1.2; }
+      else e.jumpT = .3;
+    }
   }
   if (e.k==='shooter'){ e.shotT -= dt;
     if (p && e.shotT <= 0 && Math.abs(p.y - e.y) < 10){ e.dir = Math.sign(p.x - e.x) || e.dir; e.shotT = e.angry ? 1.8 : 3; W.proj.push({x: e.x + 7 + e.dir*8, y: e.y + 7, vx: e.dir*170, t:0}); ev(W,'zap'); } }
@@ -746,6 +773,7 @@ function fxEvent(W, e, local){
   else if (k==='letter'){ SFX.power(); text(W, a, b-14, d, '#ffd23f', 22, true); }
   else if (k==='extend'){ SFX.win(); text(W, GW/2, GH/2-20, '¡EXTEND! +1 VIDA', '#ffd23f', 30, true); }
   else if (k==='zap') SFX.zap();
+  else if (k==='ejump'){}
   else if (k==='bosshit'){ SFX.bosshit(); burst(W, a, b, '#ff3355', 10, 200); }
   else if (k==='bossdie'){ SFX.boom(); for (let i=0;i<5;i++) ring(W, a, b, ['#ffd23f','#ff2bd6','#2bf0ff'][i%3], 300+i*80); burst(W, a, b, '#ffd23f', 80, 420); W.shake = 1.2; }
   else if (k==='clear'){ SFX.clear(); }
